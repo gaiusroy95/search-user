@@ -1,8 +1,9 @@
 import { useEffect, useRef } from 'react'
-import { SearchX, Users } from 'lucide-react'
+import { Loader2, SearchX, Users } from 'lucide-react'
 import { DiscoverProfileCard } from '@/features/discover/DiscoverProfileCard'
 import { EmptyState } from '@/components/ui/empty-state'
 import { SkeletonCard } from '@/components/ui/skeleton'
+import { Button } from '@/components/ui/button'
 import type { Developer } from '@/types'
 
 interface DiscoverResultsGridProps {
@@ -14,6 +15,8 @@ interface DiscoverResultsGridProps {
   fetchNextPage: () => void
   totalCount?: number
   hasClientFilters: boolean
+  /** Auto infinite-scroll only when refining filters are off */
+  autoLoadMore?: boolean
 }
 
 export function DiscoverResultsGrid({
@@ -25,21 +28,33 @@ export function DiscoverResultsGrid({
   fetchNextPage,
   totalCount,
   hasClientFilters,
+  autoLoadMore = true,
 }: DiscoverResultsGridProps) {
   const sentinelRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    if (!autoLoadMore || hasClientFilters) return
     const el = sentinelRef.current
-    if (!el || !hasNextPage) return
+    if (!el || !hasNextPage || isLoading || isFetchingNextPage) return
+
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0]?.isIntersecting && !isFetchingNextPage) fetchNextPage()
+        if (entries[0]?.isIntersecting && !isFetchingNextPage) {
+          fetchNextPage()
+        }
       },
-      { rootMargin: '240px' }
+      { rootMargin: '120px', threshold: 0.1 }
     )
     observer.observe(el)
     return () => observer.disconnect()
-  }, [fetchNextPage, hasNextPage, isFetchingNextPage])
+  }, [
+    autoLoadMore,
+    fetchNextPage,
+    hasClientFilters,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading,
+  ])
 
   if (isLoading) {
     return (
@@ -53,16 +68,29 @@ export function DiscoverResultsGrid({
 
   if (!developers.length) {
     return (
-      <EmptyState
-        variant="dashed"
-        icon={SearchX}
-        title={hasClientFilters ? 'No matches for your filters' : 'No developers found'}
-        description={
-          hasClientFilters
-            ? 'Try broadening your search or clearing filters to see more profiles.'
-            : 'Adjust your country or GitHub filters and search again.'
-        }
-      />
+      <div className="space-y-6">
+        <EmptyState
+          variant="dashed"
+          icon={SearchX}
+          title="No developers found"
+          description="Adjust country, skills, role, or tech and click Search GitHub again."
+        />
+        {hasClientFilters && hasNextPage && (
+          <div className="flex justify-center">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={isFetchingNextPage}
+              onClick={() => fetchNextPage()}
+            >
+              {isFetchingNextPage ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : null}
+              Load more from GitHub
+            </Button>
+          </div>
+        )}
+      </div>
     )
   }
 
@@ -87,7 +115,7 @@ export function DiscoverResultsGrid({
       <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
         {developers.map((dev, i) => (
           <DiscoverProfileCard
-            key={`${dev.username}-${i}`}
+            key={dev.username}
             developer={dev}
             country={country}
             index={i}
@@ -103,9 +131,25 @@ export function DiscoverResultsGrid({
         </div>
       )}
 
-      {hasNextPage && !isFetchingNextPage && (
+      {hasNextPage && !isFetchingNextPage && autoLoadMore && !hasClientFilters && (
         <div ref={sentinelRef} className="flex justify-center py-6" aria-hidden>
           <div className="h-5 w-5 animate-pulse rounded-full bg-muted" />
+        </div>
+      )}
+
+      {hasNextPage && (hasClientFilters || !autoLoadMore) && (
+        <div className="flex justify-center pb-2">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isFetchingNextPage}
+            onClick={() => fetchNextPage()}
+          >
+            {isFetchingNextPage ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : null}
+            Load more profiles
+          </Button>
         </div>
       )}
     </div>

@@ -22,45 +22,56 @@ function includesText(value: string | null | undefined, needle: string): boolean
   return value.toLowerCase().includes(needle.trim().toLowerCase())
 }
 
+function profileHaystack(dev: Developer): string {
+  return [
+    dev.name,
+    dev.username,
+    dev.bio,
+    dev.company,
+    dev.email,
+    dev.location,
+    dev.primaryLanguage,
+    ...dev.languages,
+    ...dev.repositories.map((r) => r.language),
+    ...dev.repositories.map((r) => r.name),
+    ...dev.repositories.map((r) => r.description),
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase()
+}
+
+function languagePool(dev: Developer): string[] {
+  return [
+    dev.primaryLanguage,
+    ...dev.languages,
+    ...dev.repositories.map((r) => r.language),
+  ].filter(Boolean) as string[]
+}
+
 export function filterDiscoverResults(
   developers: Developer[],
   filters: DiscoverClientFilters
 ): Developer[] {
   return developers.filter((dev) => {
+    const haystack = profileHaystack(dev)
+
     if (filters.query.trim()) {
       const q = filters.query.trim().toLowerCase()
-      const haystack = [
-        dev.name,
-        dev.username,
-        dev.bio,
-        dev.company,
-        dev.email,
-        dev.location,
-        dev.primaryLanguage,
-        ...dev.languages,
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
       if (!haystack.includes(q)) return false
     }
 
     if (filters.skill.trim()) {
       const skill = filters.skill.trim().toLowerCase()
-      const langs = [dev.primaryLanguage, ...dev.languages].filter(Boolean) as string[]
-      if (!langs.some((l) => l.toLowerCase().includes(skill))) return false
+      const langs = languagePool(dev)
+      const langHit = langs.some((l) => l.toLowerCase().includes(skill))
+      // Also match bio/name when language labels don't contain the skill keyword
+      if (!langHit && !haystack.includes(skill)) return false
     }
 
     if (filters.tech.trim()) {
       const tech = filters.tech.trim().toLowerCase()
-      const langs = [dev.primaryLanguage, ...dev.languages].filter(Boolean) as string[]
-      const repos = dev.repositories.map((r) => r.language).filter(Boolean) as string[]
-      if (
-        ![...langs, ...repos].some((t) => t.toLowerCase().includes(tech)) &&
-        !dev.bio?.toLowerCase().includes(tech)
-      ) {
-        return false
-      }
+      if (!haystack.includes(tech)) return false
     }
 
     if (filters.role.trim()) {
@@ -68,6 +79,7 @@ export function filterDiscoverResults(
       if (
         !includesText(dev.bio, role) &&
         !includesText(dev.company, role) &&
+        !includesText(dev.name, role) &&
         !dev.username.toLowerCase().includes(role)
       ) {
         return false

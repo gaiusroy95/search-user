@@ -1,25 +1,57 @@
 const { createGitHubClient } = require('../utils/githubClient');
 const { ValidationError, NotFoundError } = require('../utils/errors');
+const {
+  VALID_STACKS,
+  normalizeStack,
+  getStackQueryClause,
+  matchesStack,
+} = require('../constants/stacks');
+const {
+  MAX_TERM_LENGTH,
+  sanitizeSearchTerm,
+  formatKeyword,
+  mapSkillOrTech,
+} = require('../constants/languages');
+const {
+  fetchCommitPatch,
+  isGithubNoreply,
+  pickBestEmail,
+} = require('../utils/patchEmail');
 
-const DEFAULT_LIMIT = 10;
+const DEFAULT_LIMIT = 24;
 const MAX_LIMIT = 100;
 const GITHUB_SEARCH_PER_PAGE = 30;
 const MAX_INTERNAL_SEARCH_PAGES = 5;
-const DETAIL_CONCURRENCY = 6;
+const DETAIL_CONCURRENCY = 12;
+/** How many recent repos to probe for a commit .patch email. */
+const EMAIL_REPO_PROBE_LIMIT = 3;
 
 /**
  * Builds a GitHub user search query string from filter options.
- * Note: GitHub Search API supports location and followers qualifiers,
- * but NOT following — that filter is applied after fetching user details.
+ * Mirrors github.com user search: location, type, followers, repos,
+ * language:, free-text keywords, and optional stack keyword clauses.
+ * Following is applied after fetching user details (not a Search qualifier).
  */
 function mapSearchType(type) {
   if (type === 'group') return 'org';
   return 'user'; // user and users both search individual users
 }
 
-function buildSearchQuery({ country, maxFollowers, maxRepos, type }) {
+function buildSearchQuery({
+  country,
+  maxFollowers,
+  maxRepos,
+  type,
+  stack,
+  query,
+  skill,
+  role,
+  tech,
+  company,
+}) {
   const searchType = mapSearchType(type || 'user');
   const parts = [`location:"${country}"`, `type:${searchType}`];
+  const languages = new Set();
 
   if (maxFollowers != null && maxFollowers > 0) {
     parts.push(`followers:<=${maxFollowers}`);
@@ -29,7 +61,43 @@ function buildSearchQuery({ country, maxFollowers, maxRepos, type }) {
     parts.push(`repos:<=${maxRepos}`);
   }
 
+  const stackClause = stack ? getStackQueryClause(stack) : null;
+  if (stackClause) {
+    parts.push(stackClause);
+  }
+
+  for (const field of [skill, tech]) {
+    const mapped = mapSkillOrTech(field);
+    if (mapped.language) languages.add(mapped.language);
+    else if (mapped.keyword) parts.push(mapped.keyword);
+  }
+
+  for (const lang of languages) {
+    // GitHub language names with spaces/symbols need quoting (e.g. C#, Objective-C)
+    if (/[^A-Za-z0-9]/.test(lang)) {
+      parts.push(`language:"${lang}"`);
+    } else {
+      parts.push(`language:${lang}`);
+    }
+  }
+
+  for (const field of [role, company, query]) {
+    const keyword = formatKeyword(field);
+    if (keyword) parts.push(keyword);
+  }
+
   return parts.join(' ');
+}
+
+function deriveLanguagesFromRepos(repos) {
+  const languages = [];
+  const seen = new Set();
+  for (const repo of repos || []) {
+    if (!repo.language || seen.has(repo.language)) continue;
+    seen.add(repo.language);
+    languages.push(repo.language);
+  }
+  return languages;
 }
 
 /**
@@ -134,6 +202,12 @@ class GitHubService {
       maxFollowing,
       maxRepos,
       type,
+      stack,
+      query,
+      skill,
+      role,
+      tech,
+      company,
       limit,
       page,
       // legacy min* support maps to max*
@@ -150,6 +224,27 @@ class GitHubService {
 
     const validTypes = ['user', 'users', 'group'];
     const searchType = type || 'user';
+    const normalizedStack = normalizeStack(stack);
+
+    if (
+      stack != null &&
+      stack !== '' &&
+      String(stack).toLowerCase() !== 'any' &&
+      !normalizedStack
+    ) {
+      throw new ValidationError(
+        `"stack" must be one of: ${VALID_STACKS.join(', ')}, or omitted.`
+      );
+    }
+
+    const parseTerm = (value, field) => {
+      if (value == null || value === '') return null;
+      if (typeof value !== 'string') {
+        throw new ValidationError(`"${field}" must be a string.`);
+      }
+      const cleaned = sanitizeSearchTerm(value, MAX_TERM_LENGTH);
+      return cleaned || null;
+    };
 
     const normalized = {
       country: country.trim(),
@@ -157,6 +252,12 @@ class GitHubService {
       maxFollowing: null,
       maxRepos: null,
       type: validTypes.includes(searchType) ? searchType : 'user',
+      stack: normalizedStack,
+      query: parseTerm(query, 'query'),
+      skill: parseTerm(skill, 'skill'),
+      role: parseTerm(role, 'role'),
+      tech: parseTerm(tech, 'tech'),
+      company: parseTerm(company, 'company'),
       limit: DEFAULT_LIMIT,
       page: 1,
     };
@@ -209,60 +310,58 @@ class GitHubService {
   }
 
   /**
-   * Fetch latest commit metadata for card/list display (2 API calls).
+   * Resolve a contact email from recent commit `.patch` files when the
+   * profile has no public email.
+   *
+   * Flow (same as browsing github.com/.../commit/{sha}.patch):
+   * 1. List recently pushed repos
+   * 2. Find latest commit by this author
+   * 3. GET https://github.com/{owner}/{repo}/commit/{sha}.patch
+   * 4. Parse `From: Name <email>` from the patch header
    */
-  async _fetchLightActivity(username, accountCreatedAt) {
+  async _resolveEmailFromPatches(username) {
     try {
       const { data: repos } = await this.client.get(`/users/${username}/repos`, {
-        params: { sort: 'pushed', per_page: 1 },
+        params: { sort: 'pushed', per_page: EMAIL_REPO_PROBE_LIMIT, type: 'owner' },
       });
-      if (!repos?.length) {
-        return {
-          accountCreatedAt,
-          lastCommitAt: null,
-          lastCommitFrom: null,
-          lastCommitEmail: null,
-          lastCommitMessage: null,
-          lastCommitUrl: null,
-          lastCommitPatchUrl: null,
-          recentCommits: [],
-        };
+
+      if (!repos?.length) return null;
+
+      for (const repo of repos) {
+        const owner = repo.owner?.login || username;
+        const commit = await this._fetchLatestCommit(owner, repo.name, username);
+        if (!commit) continue;
+
+        // Prefer a real mailbox already present on the commit API payload
+        const apiEmail = pickBestEmail(commit.email);
+        if (apiEmail && !isGithubNoreply(apiEmail)) {
+          return apiEmail;
+        }
+
+        if (!commit.patchUrl && !commit.fullSha) continue;
+
+        const patchUrl =
+          commit.patchUrl ||
+          `https://github.com/${owner}/${repo.name}/commit/${commit.fullSha}.patch`;
+
+        try {
+          const patchEmail = await fetchCommitPatch(patchUrl);
+          const best = pickBestEmail(patchEmail, apiEmail);
+          if (best) return best;
+        } catch {
+          // Try the next repo if patch fetch fails (private fork, rate limit, etc.)
+        }
       }
 
-      const repo = repos[0];
-      const owner = repo.owner?.login || username;
-      const latestCommit = await this._fetchLatestCommit(
-        owner,
-        repo.name,
-        username
-      );
-
-      return {
-        accountCreatedAt,
-        lastCommitAt: latestCommit?.date || null,
-        lastCommitFrom: latestCommit?.from || null,
-        lastCommitEmail: latestCommit?.email || null,
-        lastCommitMessage: latestCommit?.message || null,
-        lastCommitUrl: latestCommit?.url || null,
-        lastCommitPatchUrl: latestCommit?.patchUrl || null,
-        recentCommits: latestCommit ? [latestCommit] : [],
-      };
+      return null;
     } catch {
-      return {
-        accountCreatedAt,
-        lastCommitAt: null,
-        lastCommitFrom: null,
-        lastCommitEmail: null,
-        lastCommitMessage: null,
-        lastCommitUrl: null,
-        lastCommitPatchUrl: null,
-        recentCommits: [],
-      };
+      return null;
     }
   }
 
   /**
-   * Profile + commit summary for search result cards/lists.
+   * Search enrichment: profile for name + public email; if email is missing,
+   * fall back to commit `.patch` From: header.
    */
   async _enrichSearchResultLight(item, searchType) {
     const isOrg = searchType === 'group';
@@ -270,49 +369,54 @@ class GitHubService {
     const { data } = await this.client.get(endpoint);
 
     if (isOrg) {
-      return mapUserProfile(
-        {
-          login: data.login,
-          name: data.name || data.login,
-          html_url: data.html_url,
-          avatar_url: data.avatar_url,
-          bio: data.description,
-          location: data.location,
-          email: null,
-          company: null,
-          twitter_username: data.twitter_username,
-          blog: data.blog,
-          followers: 0,
-          following: 0,
-          public_repos: data.public_repos,
-          created_at: data.created_at,
-        },
-        {
-          primaryLanguage: null,
-          languages: [],
-          repositories: [],
-          activity: {
-            accountCreatedAt: data.created_at,
-            lastCommitAt: null,
-            lastCommitFrom: null,
-            lastCommitEmail: null,
-            lastCommitMessage: null,
-            lastCommitUrl: null,
-            lastCommitPatchUrl: null,
-            recentCommits: [],
-          },
-        }
-      );
+      return {
+        username: data.login,
+        name: data.name || data.login,
+        profile: data.html_url,
+        avatar: data.avatar_url || null,
+        bio: data.description || null,
+        location: data.location || null,
+        email: null,
+        company: null,
+        twitter: data.twitter_username || null,
+        website: data.blog || null,
+        followers: 0,
+        following: 0,
+        publicRepos: data.public_repos || 0,
+        primaryLanguage: null,
+        languages: [],
+        repositories: [],
+        createdAt: data.created_at,
+        activity: null,
+      };
     }
 
-    const activity = await this._fetchLightActivity(data.login, data.created_at);
+    let email = data.email || null;
+    if (!email || isGithubNoreply(email)) {
+      const patchEmail = await this._resolveEmailFromPatches(data.login);
+      email = pickBestEmail(email, patchEmail);
+    }
 
-    return mapUserProfile(data, {
+    return {
+      username: data.login,
+      name: data.name || null,
+      profile: data.html_url,
+      avatar: data.avatar_url || null,
+      bio: data.bio || null,
+      location: data.location || null,
+      email,
+      company: data.company || null,
+      twitter: data.twitter_username || null,
+      website: data.blog || null,
+      followers: data.followers || 0,
+      following: data.following || 0,
+      publicRepos: data.public_repos || 0,
       primaryLanguage: null,
       languages: [],
       repositories: [],
-      activity,
-    });
+      createdAt: data.created_at,
+      activity: null,
+    };
   }
 
   /**
@@ -399,23 +503,56 @@ class GitHubService {
       user.login,
       repoLimit
     );
+    const activity = this._buildActivitySummary(user, repoSummaries);
 
-    return mapUserProfile(user, {
-      primaryLanguage,
-      languages: Object.keys(
-        repos.reduce((acc, r) => {
-          if (r.language) acc[r.language] = true;
-          return acc;
-        }, {})
-      ),
-      repositories: repoSummaries,
-      activity: this._buildActivitySummary(user, repoSummaries),
-    });
+    let email = user.email || null;
+    if (!email || isGithubNoreply(email)) {
+      // Prefer emails already found on commit payloads, then .patch From: headers
+      const commitEmails = repoSummaries
+        .map((r) => r.latestCommit?.email)
+        .filter(Boolean);
+      let resolved = pickBestEmail(email, ...commitEmails, activity.lastCommitEmail);
+
+      if (!resolved || isGithubNoreply(resolved)) {
+        for (const summary of repoSummaries) {
+          const patchUrl = summary.latestCommit?.patchUrl;
+          if (!patchUrl) continue;
+          try {
+            const patchEmail = await fetchCommitPatch(patchUrl);
+            resolved = pickBestEmail(resolved, patchEmail);
+            if (resolved && !isGithubNoreply(resolved)) break;
+          } catch {
+            // continue
+          }
+        }
+      }
+
+      email = resolved;
+    }
+
+    return mapUserProfile(
+      { ...user, email },
+      {
+        primaryLanguage,
+        languages: Object.keys(
+          repos.reduce((acc, r) => {
+            if (r.language) acc[r.language] = true;
+            return acc;
+          }, {})
+        ),
+        repositories: repoSummaries,
+        activity,
+      }
+    );
   }
 
   _passesMaxFilters(profile, { maxFollowing }) {
     if (maxFollowing != null && profile.following > maxFollowing) return false;
     return true;
+  }
+
+  _passesStackFilter(profile, { stack }) {
+    return matchesStack(profile, stack);
   }
 
   /**
@@ -438,6 +575,9 @@ class GitHubService {
 
     // Map client page → GitHub search page range.
     // Each client page requests `limit` users; we scan GitHub pages as needed.
+    // Stack post-filter disabled — query keywords already bias results.
+    // Profile + optional commit .patch email when public email is missing.
+    const maxInternalPages = MAX_INTERNAL_SEARCH_PAGES;
     const githubPagesPerClientPage = Math.max(
       1,
       Math.ceil(params.limit / GITHUB_SEARCH_PER_PAGE)
@@ -451,7 +591,7 @@ class GitHubService {
 
     for (
       let offset = 0;
-      offset < MAX_INTERNAL_SEARCH_PAGES &&
+      offset < maxInternalPages &&
       collected.length < params.limit &&
       !githubExhausted;
       offset += 1
@@ -485,6 +625,7 @@ class GitHubService {
       for (const profile of profiles) {
         if (seenUsernames.has(profile.username)) continue;
         if (!this._passesMaxFilters(profile, params)) continue;
+        if (!this._passesStackFilter(profile, params)) continue;
 
         seenUsernames.add(profile.username);
         collected.push(profile);

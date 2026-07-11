@@ -33,7 +33,11 @@ export function buildTaskPrompt(
     .join('\n')
 
   const filterLine = snapshot.activeFilters
-    ? `Active search: country=${snapshot.activeFilters.country}`
+    ? `Active search: country=${snapshot.activeFilters.country}${
+        snapshot.activeFilters.stack
+          ? `, stack=${snapshot.activeFilters.stack}`
+          : ''
+      }`
     : 'No active discovery filters'
 
   const taskInstructions: Record<CopilotTask, string> = {

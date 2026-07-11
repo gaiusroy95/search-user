@@ -24,14 +24,30 @@ Server runs at `http://localhost:3000`.
 
 ```json
 {
-  "country": "Japan",
-  "minFollowers": 50,
-  "minFollowing": 10,
-  "minRepos": 20,
-  "limit": 20,
+  "country": "United States",
+  "stack": "frontend",
+  "skill": "TypeScript",
+  "role": "engineer",
+  "tech": "React",
+  "company": "Acme",
+  "query": "seattle",
+  "maxFollowers": 500,
+  "maxRepos": 100,
+  "type": "user",
+  "limit": 24,
   "page": 1
 }
 ```
+
+Optional text filters are mapped like GitHub user search:
+
+- `skill` / `tech` → `language:` when recognized (e.g. TypeScript, Go); otherwise free-text keywords
+- `role` / `company` / `query` → free-text keywords
+- `stack` → keyword clause (`frontend` | `backend` | `fullstack` | `devops`)
+
+Example `q`: `location:"United States" type:user language:TypeScript React engineer "Acme"`
+
+**Emails:** when a profile has no public email, the API probes recent commits and reads `From: Name <email>` from `https://github.com/{owner}/{repo}/commit/{sha}.patch`.
 
 **Infinite scroll:** request `page: 1`, then increment while `hasMore` is `true` (or use `nextPage`).
 

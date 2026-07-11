@@ -1,10 +1,11 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { MessageTemplate, SearchType } from '@/types'
+import type { DeveloperStack, MessageTemplate, SearchType } from '@/types'
 import { DEFAULT_COUNTRY } from '@/types'
 
 interface SearchFormState {
   country: string
+  stack: DeveloperStack | ''
   maxFollowers: string
   maxRepos: string
   maxFollowing: string
@@ -31,6 +32,7 @@ Best regards`,
 
 const defaultForm = {
   country: DEFAULT_COUNTRY,
+  stack: '' as DeveloperStack | '',
   maxFollowers: '',
   maxRepos: '',
   maxFollowing: '',

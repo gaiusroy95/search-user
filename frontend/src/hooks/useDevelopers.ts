@@ -13,6 +13,8 @@ export function useDevelopers(filters: SearchFilters | null, enabled: boolean) {
     enabled: enabled && Boolean(filters?.country),
     staleTime: 5 * 60 * 1000,
     gcTime: 30 * 60 * 1000,
-    placeholderData: (previousData) => previousData,
+    // Do not keep previous search pages visible — that looked like results
+    // "trickling in" while a new query was still loading.
+    placeholderData: undefined,
   })
 }

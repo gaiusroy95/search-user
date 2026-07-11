@@ -6,13 +6,8 @@ class SearchController {
   }
 
   /**
-   * POST /search-users
-   * Body: { country, minFollowers?, minFollowing?, minRepos?, limit?, page? }
-   * Pagination: pass `page` (1-based) for infinite scroll; use `hasMore` / `nextPage`.
-   */
-  /**
-   * POST /lookup-user
-   * Body: { email: "user@gmail.com" } — also accepts GitHub username
+   * POST /search-users body:
+   * { country, stack?, query?, skill?, role?, tech?, company?, maxFollowers?, maxFollowing?, maxRepos?, type?, limit?, page? }
    */
   getUserDetails = async (req, res, next) => {
     try {

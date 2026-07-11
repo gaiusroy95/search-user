@@ -71,8 +71,40 @@ export interface Developer {
 
 export type SearchType = 'user' | 'users' | 'group'
 
+/** Engineering focus applied on GitHub search (server-side). */
+export type DeveloperStack =
+  | 'frontend'
+  | 'backend'
+  | 'fullstack'
+  | 'devops'
+
+export const DEVELOPER_STACKS: readonly DeveloperStack[] = [
+  'frontend',
+  'backend',
+  'fullstack',
+  'devops',
+] as const
+
+export const STACK_LABELS: Record<DeveloperStack, string> = {
+  frontend: 'Frontend',
+  backend: 'Backend',
+  fullstack: 'Full stack',
+  devops: 'DevOps',
+}
+
 export interface SearchFilters {
   country: string
+  stack?: DeveloperStack
+  /** Free-text keywords (GitHub user search terms). */
+  query?: string
+  /** Skill keyword or programming language → language: when recognized. */
+  skill?: string
+  /** Role keyword (no official GitHub qualifier). */
+  role?: string
+  /** Tech keyword or programming language → language: when recognized. */
+  tech?: string
+  /** Company keyword (no official GitHub qualifier). */
+  company?: string
   maxFollowers?: number
   maxRepos?: number
   maxFollowing?: number

@@ -29,11 +29,17 @@ export async function searchDevelopers(
 ): Promise<SearchResponse> {
   const payload = {
     country: filters.country,
+    stack: filters.stack || undefined,
+    query: filters.query?.trim() || undefined,
+    skill: filters.skill?.trim() || undefined,
+    role: filters.role?.trim() || undefined,
+    tech: filters.tech?.trim() || undefined,
+    company: filters.company?.trim() || undefined,
     maxFollowers: filters.maxFollowers || undefined,
     maxRepos: filters.maxRepos || undefined,
     maxFollowing: filters.maxFollowing || undefined,
     type: filters.type,
-    limit: filters.limit ?? 10,
+    limit: filters.limit ?? 24,
     page,
   }
   const { data } = await client.post<SearchResponse>('/search-users', payload)

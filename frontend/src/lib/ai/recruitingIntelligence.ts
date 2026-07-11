@@ -332,6 +332,9 @@ export function generateSearchRecommendations(
   if (activeFilters?.country) {
     lines.push('', `## Active search context`)
     lines.push(`- Country filter: **${activeFilters.country}**`)
+    if (activeFilters.stack) {
+      lines.push(`- Stack filter: **${activeFilters.stack}**`)
+    }
     const topLoc = [...locationCounts.entries()].sort((a, b) => b[1] - a[1])[0]
     if (topLoc) {
       lines.push(`- Dominant location signal: **${topLoc[0]}** (${topLoc[1]} profiles)`)

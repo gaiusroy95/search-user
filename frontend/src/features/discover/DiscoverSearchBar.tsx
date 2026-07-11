@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Building2,
   ChevronDown,
   Code2,
+  Layers,
   Loader2,
   Search,
   SlidersHorizontal,
@@ -22,41 +23,104 @@ import {
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { useSearchStore } from '@/stores/useSearchStore'
-import { COUNTRIES } from '@/types'
-import type { SearchFilters } from '@/types'
 import {
-  countActiveFilters,
-  EMPTY_DISCOVER_FILTERS,
-  type DiscoverClientFilters,
-} from '@/features/discover/discoverFilters'
+  COUNTRIES,
+  DEVELOPER_STACKS,
+  STACK_LABELS,
+  type DeveloperStack,
+  type SearchFilters,
+} from '@/types'
+
+export interface DiscoverFormFilters {
+  query: string
+  skill: string
+  role: string
+  tech: string
+  company: string
+}
+
+export const EMPTY_DISCOVER_FORM: DiscoverFormFilters = {
+  query: '',
+  skill: '',
+  role: '',
+  tech: '',
+  company: '',
+}
+
+function countDraftFilters(filters: DiscoverFormFilters): number {
+  return Object.values(filters).filter((v) => v.trim().length > 0).length
+}
+
+function submittedFilterChips(filters: SearchFilters | null): string[] {
+  if (!filters) return []
+  const chips: string[] = []
+  if (filters.country) chips.push(filters.country)
+  if (filters.stack) chips.push(STACK_LABELS[filters.stack] ?? filters.stack)
+  if (filters.query?.trim()) chips.push(`q: ${filters.query.trim()}`)
+  if (filters.skill?.trim()) chips.push(`skill: ${filters.skill.trim()}`)
+  if (filters.role?.trim()) chips.push(`role: ${filters.role.trim()}`)
+  if (filters.tech?.trim()) chips.push(`tech: ${filters.tech.trim()}`)
+  if (filters.company?.trim()) chips.push(`company: ${filters.company.trim()}`)
+  if (filters.maxFollowers) chips.push(`≤${filters.maxFollowers} followers`)
+  if (filters.maxRepos) chips.push(`≤${filters.maxRepos} repos`)
+  if (filters.maxFollowing) chips.push(`≤${filters.maxFollowing} following`)
+  if (filters.type && filters.type !== 'user') chips.push(filters.type)
+  return chips
+}
 
 interface DiscoverSearchBarProps {
-  clientFilters: DiscoverClientFilters
-  onClientFiltersChange: (filters: DiscoverClientFilters) => void
+  /** Last submitted GitHub search filters (for chips). */
+  activeFilters: SearchFilters | null
   onSearch: (filters: SearchFilters) => void
   isLoading?: boolean
   searchEnabled: boolean
 }
 
 export function DiscoverSearchBar({
-  clientFilters,
-  onClientFiltersChange,
+  activeFilters,
   onSearch,
   isLoading,
   searchEnabled,
 }: DiscoverSearchBarProps) {
-  const { country, maxFollowers, maxRepos, maxFollowing, type, setField } = useSearchStore()
+  const { country, stack, maxFollowers, maxRepos, maxFollowing, type, setField } =
+    useSearchStore()
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [error, setError] = useState('')
+  const [form, setForm] = useState<DiscoverFormFilters>(() => ({
+    query: activeFilters?.query ?? '',
+    skill: activeFilters?.skill ?? '',
+    role: activeFilters?.role ?? '',
+    tech: activeFilters?.tech ?? '',
+    company: activeFilters?.company ?? '',
+  }))
 
-  const activeFilterCount = countActiveFilters(clientFilters)
+  // Hydrate draft fields when a persisted search session is restored.
+  useEffect(() => {
+    if (!activeFilters) return
+    setForm({
+      query: activeFilters.query ?? '',
+      skill: activeFilters.skill ?? '',
+      role: activeFilters.role ?? '',
+      tech: activeFilters.tech ?? '',
+      company: activeFilters.company ?? '',
+    })
+  }, [
+    activeFilters?.query,
+    activeFilters?.skill,
+    activeFilters?.role,
+    activeFilters?.tech,
+    activeFilters?.company,
+  ])
 
-  const updateClient = (key: keyof DiscoverClientFilters, value: string) => {
-    onClientFiltersChange({ ...clientFilters, [key]: value })
+  const draftCount = countDraftFilters(form)
+  const chips = useMemo(() => submittedFilterChips(activeFilters), [activeFilters])
+
+  const updateForm = (key: keyof DiscoverFormFilters, value: string) => {
+    setForm((prev) => ({ ...prev, [key]: value }))
   }
 
-  const clearClientFilters = () => {
-    onClientFiltersChange(EMPTY_DISCOVER_FILTERS)
+  const clearDraft = () => {
+    setForm(EMPTY_DISCOVER_FORM)
   }
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -68,11 +132,17 @@ export function DiscoverSearchBar({
     setError('')
     onSearch({
       country,
+      stack: stack || undefined,
+      query: form.query.trim() || undefined,
+      skill: form.skill.trim() || undefined,
+      role: form.role.trim() || undefined,
+      tech: form.tech.trim() || undefined,
+      company: form.company.trim() || undefined,
       maxFollowers: maxFollowers ? Number(maxFollowers) : undefined,
       maxRepos: maxRepos ? Number(maxRepos) : undefined,
       maxFollowing: maxFollowing ? Number(maxFollowing) : undefined,
       type,
-      limit: 10,
+      limit: 24,
     })
   }
 
@@ -89,7 +159,8 @@ export function DiscoverSearchBar({
               Find your next <span className="text-gradient">technical hire</span>
             </h1>
             <p className="mx-auto mt-2 max-w-lg text-sm text-muted-foreground">
-              Search GitHub by location, then refine with skills, role, tech stack, and company.
+              Enter skills, role, or tech, then click Search GitHub — same style as
+              GitHub user search.
             </p>
           </div>
         )}
@@ -99,9 +170,9 @@ export function DiscoverSearchBar({
             <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               type="search"
-              placeholder="Search by name, username, bio, or email…"
-              value={clientFilters.query}
-              onChange={(e) => updateClient('query', e.target.value)}
+              placeholder="Keywords (name, bio…) — applied on Search"
+              value={form.query}
+              onChange={(e) => updateForm('query', e.target.value)}
               className="h-11 border-border/60 bg-muted/30 pl-11 text-base shadow-xs"
               inputSize="lg"
             />
@@ -111,9 +182,9 @@ export function DiscoverSearchBar({
             <div className="relative">
               <Code2 className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Skills"
-                value={clientFilters.skill}
-                onChange={(e) => updateClient('skill', e.target.value)}
+                placeholder="Skills (e.g. TypeScript)"
+                value={form.skill}
+                onChange={(e) => updateForm('skill', e.target.value)}
                 className="h-9 pl-9"
                 inputSize="sm"
               />
@@ -121,9 +192,9 @@ export function DiscoverSearchBar({
             <div className="relative">
               <User className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Role"
-                value={clientFilters.role}
-                onChange={(e) => updateClient('role', e.target.value)}
+                placeholder="Role (e.g. engineer)"
+                value={form.role}
+                onChange={(e) => updateForm('role', e.target.value)}
                 className="h-9 pl-9"
                 inputSize="sm"
               />
@@ -131,9 +202,9 @@ export function DiscoverSearchBar({
             <div className="relative">
               <Sparkles className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
-                placeholder="Tech stack"
-                value={clientFilters.tech}
-                onChange={(e) => updateClient('tech', e.target.value)}
+                placeholder="Tech (e.g. React, Go)"
+                value={form.tech}
+                onChange={(e) => updateForm('tech', e.target.value)}
                 className="h-9 pl-9"
                 inputSize="sm"
               />
@@ -142,8 +213,8 @@ export function DiscoverSearchBar({
               <Building2 className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <Input
                 placeholder="Company"
-                value={clientFilters.company}
-                onChange={(e) => updateClient('company', e.target.value)}
+                value={form.company}
+                onChange={(e) => updateForm('company', e.target.value)}
                 className="h-9 pl-9"
                 inputSize="sm"
               />
@@ -159,6 +230,29 @@ export function DiscoverSearchBar({
                 {COUNTRIES.map((c) => (
                   <SelectItem key={c} value={c}>
                     {c}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select
+              value={stack || 'any'}
+              onValueChange={(v) =>
+                setField('stack', v === 'any' ? '' : (v as DeveloperStack))
+              }
+            >
+              <SelectTrigger
+                className="h-9 w-[160px] border-border/60 bg-muted/20"
+                aria-label="Engineering stack"
+              >
+                <Layers className="mr-1.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                <SelectValue placeholder="Stack" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="any">Any stack</SelectItem>
+                {DEVELOPER_STACKS.map((s) => (
+                  <SelectItem key={s} value={s}>
+                    {STACK_LABELS[s]}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -187,25 +281,30 @@ export function DiscoverSearchBar({
               />
             </Button>
 
-            {activeFilterCount > 0 && (
+            {draftCount > 0 && (
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
                 className="h-9 text-muted-foreground"
-                onClick={clearClientFilters}
+                onClick={clearDraft}
               >
                 <X className="h-3.5 w-3.5" />
-                Clear filters ({activeFilterCount})
+                Clear fields ({draftCount})
               </Button>
             )}
-
-            {activeFilterCount > 0 && (
-              <Badge variant="secondary" className="hidden sm:inline-flex">
-                {activeFilterCount} active filter{activeFilterCount !== 1 ? 's' : ''}
-              </Badge>
-            )}
           </div>
+
+          {chips.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2" aria-label="Active GitHub filters">
+              <span className="text-xs text-muted-foreground">Applied on last search:</span>
+              {chips.map((chip) => (
+                <Badge key={chip} variant="secondary" className="text-xs font-normal">
+                  {chip}
+                </Badge>
+              ))}
+            </div>
+          )}
 
           {showAdvanced && (
             <div className="grid grid-cols-1 gap-4 rounded-lg border border-border/60 bg-muted/20 p-4 sm:grid-cols-2 lg:grid-cols-4">
