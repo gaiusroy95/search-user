@@ -109,7 +109,7 @@ function listProviders() {
 function isOAuthConfigured(providerId) {
   const provider = getProvider(providerId)
   if (!provider) return false
-  if (providerId === 'github' && process.env.GITHUB_TOKEN) return true
+  if (providerId === 'github' && require('../utils/githubClient').hasGitHubToken()) return true
   const prefix = provider.envPrefix
   return Boolean(process.env[`${prefix}_CLIENT_ID`] && process.env[`${prefix}_CLIENT_SECRET`])
 }

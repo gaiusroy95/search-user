@@ -94,13 +94,21 @@ app.listen(PORT, HOST, () => {
   if (HOST === '0.0.0.0') {
     console.log(`LAN access: use your machine IP on port ${PORT}`);
   }
-  if (process.env.GITHUB_TOKEN) {
-    console.log('GitHub token: configured (5000 req/hr)');
+  const {
+    hasGitHubToken,
+    getGitHubTokenStatus,
+  } = require('./utils/githubClient');
+
+  if (hasGitHubToken()) {
+    const status = getGitHubTokenStatus();
+    console.log(
+      `GitHub tokens: ${status.total} configured (5000 req/hr each when authenticated)`
+    );
   } else {
     console.warn(
-      'WARNING: GITHUB_TOKEN not set in .env — limited to 60 GitHub API calls/hour.'
+      'WARNING: No GITHUB_TOKEN / GITHUB_TOKENS set in .env — limited to 60 GitHub API calls/hour.'
     );
-    console.warn('Add token: https://github.com/settings/tokens');
+    console.warn('Add tokens: https://github.com/settings/tokens');
   }
 });
 

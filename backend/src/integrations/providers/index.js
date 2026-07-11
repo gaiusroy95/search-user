@@ -7,7 +7,7 @@ const { generateImports } = require('../importMapper')
 
 async function syncGitHub(connection) {
   const imports = generateImports('github', connection)
-  const hasServerToken = Boolean(process.env.GITHUB_TOKEN)
+  const hasServerToken = require('../../utils/githubClient').hasGitHubToken()
   return {
     recordsProcessed: imports.length,
     summary: hasServerToken

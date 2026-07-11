@@ -2,10 +2,11 @@ import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle, KeyRound } from 'lucide-react'
 import axios from 'axios'
 import { queryKeys } from '@/lib/queryKeys'
+import { API_BASE_URL } from '@/lib/env'
 
 async function fetchHealth() {
   const { data } = await axios.get<{ status: string; tokenConfigured: boolean }>(
-    '/api/health'
+    `${API_BASE_URL}/health`
   )
   return data
 }

@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { API_BASE_URL } from '@/lib/env'
 import type {
   AuditLogEntry,
   AuthUser,
@@ -11,7 +12,7 @@ import type {
 import type { Prospect } from '@/types'
 
 const client = axios.create({
-  baseURL: '/api',
+  baseURL: API_BASE_URL,
   headers: { 'Content-Type': 'application/json' },
   timeout: 30000,
 })

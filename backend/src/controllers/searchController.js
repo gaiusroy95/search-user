@@ -59,11 +59,17 @@ class SearchController {
    */
   health = async (_req, res, next) => {
     try {
-      const tokenConfigured = Boolean(process.env.GITHUB_TOKEN);
+      const {
+        hasGitHubToken,
+        getGitHubTokenStatus,
+        createGitHubClient,
+      } = require('../utils/githubClient');
+      const tokenConfigured = hasGitHubToken();
+      const tokens = getGitHubTokenStatus();
       let githubReachable = false;
 
       if (tokenConfigured) {
-        const client = require('../utils/githubClient').createGitHubClient();
+        const client = createGitHubClient();
         await client.get('/rate_limit');
         githubReachable = true;
       }
@@ -71,12 +77,18 @@ class SearchController {
       res.json({
         status: 'ok',
         tokenConfigured,
+        tokens,
         githubReachable,
       });
     } catch (error) {
+      const {
+        hasGitHubToken,
+        getGitHubTokenStatus,
+      } = require('../utils/githubClient');
       res.status(503).json({
         status: 'degraded',
-        tokenConfigured: Boolean(process.env.GITHUB_TOKEN),
+        tokenConfigured: hasGitHubToken(),
+        tokens: getGitHubTokenStatus(),
         githubReachable: false,
         error: error.message,
       });

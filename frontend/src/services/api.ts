@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { API_BASE_URL } from '@/lib/env'
 import type {
   LookupResponse,
   SearchFilters,
@@ -8,7 +9,7 @@ import type {
 } from '@/types'
 
 const client = axios.create({
-  baseURL: '/api',
+  baseURL: API_BASE_URL,
   headers: { 'Content-Type': 'application/json' },
   timeout: 60000,
 })

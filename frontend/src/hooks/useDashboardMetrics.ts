@@ -11,6 +11,7 @@ import {
   type RecommendedAction,
 } from '@/lib/dashboardMetrics'
 import { queryKeys } from '@/lib/queryKeys'
+import { API_BASE_URL } from '@/lib/env'
 import { useActivityStore } from '@/stores/useActivityStore'
 import { useCompaniesStore } from '@/stores/useCompaniesStore'
 import { useDiscoveryStore } from '@/stores/useDiscoveryStore'
@@ -18,7 +19,7 @@ import { useProspectStore } from '@/stores/useProspectStore'
 
 async function fetchHealth() {
   const { data } = await axios.get<{ status: string; tokenConfigured: boolean }>(
-    '/api/health'
+    `${API_BASE_URL}/health`
   )
   return data
 }

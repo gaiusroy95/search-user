@@ -1,4 +1,5 @@
 import type { CopilotMessageRole, CopilotTask } from '@/lib/ai/types'
+import { API_BASE_URL } from '@/lib/env'
 
 export interface CopilotStreamRequest {
   task: CopilotTask
@@ -10,7 +11,7 @@ export interface CopilotStreamRequest {
 export async function* streamCopilotFromApi(
   request: CopilotStreamRequest
 ): AsyncGenerator<string> {
-  const response = await fetch('/api/copilot/stream', {
+  const response = await fetch(`${API_BASE_URL}/copilot/stream`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(request),
