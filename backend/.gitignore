@@ -1,0 +1,6 @@
+node_modules/
+.env
+data/collaboration.json
+data/integrations.json
+*.log
+.DS_Store

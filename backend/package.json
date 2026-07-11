@@ -1,0 +1,25 @@
+{
+  "name": "github-user-discovery",
+  "version": "1.0.0",
+  "description": "GitHub User Discovery System — search and collect public GitHub user data by location and social filters",
+  "main": "src/app.js",
+  "scripts": {
+    "start": "node src/app.js",
+    "dev": "node --watch src/app.js"
+  },
+  "keywords": [
+    "github",
+    "user-discovery",
+    "api"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "axios": "^1.7.9",
+    "cors": "^2.8.6",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2"
+  }
+}

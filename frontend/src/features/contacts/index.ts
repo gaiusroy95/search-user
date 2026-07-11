@@ -1,0 +1,5 @@
+export { ContactDrawer } from '@/features/contacts/ContactDrawer'
+export { ContactsBulkBar } from '@/features/contacts/ContactsBulkBar'
+export { ContactsTable, ContactsTableSkeleton } from '@/features/contacts/ContactsTable'
+export { ContactsToolbar } from '@/features/contacts/ContactsToolbar'
+export { SavedViewsMenu } from '@/features/contacts/SavedViewsMenu'
