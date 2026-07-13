@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type { DeveloperStack, MessageTemplate, SearchType } from '@/types'
-import { DEFAULT_COUNTRY } from '@/types'
+import { COUNTRIES, DEFAULT_COUNTRY } from '@/types'
 
 interface SearchFormState {
   country: string
@@ -40,6 +40,8 @@ const defaultForm = {
   messageTemplate: defaultTemplate,
 }
 
+const EUROPE_SET = new Set<string>(COUNTRIES)
+
 export const useSearchStore = create<SearchFormState>()(
   persist(
     (set) => ({
@@ -54,6 +56,14 @@ export const useSearchStore = create<SearchFormState>()(
 
       reset: () => set(defaultForm),
     }),
-    { name: 'github-discovery-search-form' }
+    {
+      name: 'github-discovery-search-form',
+      merge: (persisted, current) => {
+        const p = (persisted ?? {}) as Partial<SearchFormState>
+        const country =
+          p.country && EUROPE_SET.has(p.country) ? p.country : DEFAULT_COUNTRY
+        return { ...current, ...p, country }
+      },
+    }
   )
 )
