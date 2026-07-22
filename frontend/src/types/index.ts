@@ -173,6 +173,7 @@ export const COUNTRIES = [
   'Luxembourg',
   'Netherlands',
   'Norway',
+  'Philippines',
   'Poland',
   'Portugal',
   'Romania',
