@@ -55,9 +55,13 @@ class SearchController {
   };
 
   /**
-   * GET /health — liveness check.
+   * GET /health — liveness check + Demon Runner ownership flag (RUN_ON).
    */
   health = async (_req, res, next) => {
+    const runOn = String(process.env.RUN_ON || '')
+      .trim()
+      .toLowerCase() === 'true';
+
     try {
       const {
         hasGitHubToken,
@@ -76,6 +80,7 @@ class SearchController {
 
       res.json({
         status: 'ok',
+        RUN_ON: runOn,
         tokenConfigured,
         tokens,
         githubReachable,
@@ -87,6 +92,7 @@ class SearchController {
       } = require('../utils/githubClient');
       res.status(503).json({
         status: 'degraded',
+        RUN_ON: runOn,
         tokenConfigured: hasGitHubToken(),
         tokens: getGitHubTokenStatus(),
         githubReachable: false,

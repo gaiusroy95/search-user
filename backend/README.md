@@ -75,7 +75,12 @@ Response includes `user` profile and `projects` (repository links).
 
 ### `GET /health`
 
-Returns server status and whether a GitHub token is configured.
+Returns server status, whether a GitHub token is configured, and **`RUN_ON`**
+(from Render env `RUN_ON`). Demon Runner uses this for remote enable/disable:
+
+```json
+{ "status": "ok", "RUN_ON": true, "tokenConfigured": true, ... }
+```
 
 ## Project Structure
 
@@ -95,6 +100,7 @@ src/
 | `GITHUB_TOKEN` | — | Single GitHub PAT (optional if using `GITHUB_TOKENS`) |
 | `GITHUB_TOKENS` | — | Comma-separated PATs; auto-rotates on rate limit |
 | `GITHUB_TOKEN_1` … | — | Optional numbered tokens (also rotated) |
+| `RUN_ON` | — | `true`/`false` — exposed on `/health` for Demon Runner kill-switch |
 | `PORT` | `3000` | Server port |
 | `CORS_ORIGIN` | `http://localhost:5173` | Allowed frontend origin |
 | `CACHE_TTL_SECONDS` | `300` | In-memory cache TTL |
